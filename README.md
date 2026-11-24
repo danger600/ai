@@ -1,11 +1,34 @@
-<div align="center">
+# REMY THE GRIVER PRO
 
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+**Your Personal AI. Your Rules.**
 
-  <h1>Built with AI Studio</h2>
+Developer: **Remy Nsanzimana** | Brand: **BULL MAN — THE BULL MAN ON TOP**  
+Education: Level 5 Software Development, EAV KIVUMU TSS, Rwanda  
+Location: Kigali, Gasabo, Rwanda  
+GitHub: [https://github.com/danger600](https://github.com/danger600)
 
-  <p>The fastest path from prompt to production with Gemini.</p>
+## Architecture Overview
 
-  <a href="https://aistudio.google.com/apps">Start building</a>
+REMY THE GRIVER PRO is a full-stack personal AI command center and career intelligence workspace backed by SQLite (`node:sqlite`), Express, React, Tailwind CSS, and server-side `@google/genai` integration (`gemini-4-hydrogen` and `gemini-3.1-flash-lite`), plus an exportable Windows Python CustomTkinter starter bundle (`REMY-THE-GRIVER-PRO-Windows-Desktop.zip`).
 
-</div>
+### Core Modules
+- **AI Workspace**: Streaming SSE responses, 10 specialized agents with automatic intent orchestration, edit & resubmit, regenerate, copy code, PDF export, and Web Speech API voice STT/TTS with `Esc` immediate interruption.
+- **AI Developer Studio**: Code analysis, refactoring, unit tests, SQL/architecture assistance, isolated `node:vm` JavaScript sandbox, and live GitHub repository inspection.
+- **Document Intelligence & Local RAG**: Local parsing and chunking for PDF, DOCX, TXT, Markdown, CSV, XLSX, and source code with offline TF-IDF search and cited Q&A.
+- **Personal Profile & CV Vault**: Verified profile for Remy Nsanzimana, private by default (`cv.external_ai` permission gate), offline job-description skill matcher, version manager, and PDF export.
+- **Memory Vault**: Controllable long-term memories with global toggle, approval controls, search, and JSON import/export.
+- **Productivity Command Center**: Projects (`KIVUMU SMART CAMPUS`, `UBUBIKO SMART`), tasks, notes, reminders, calculator, unit converter, live Open-Meteo weather, and live currency conversion.
+- **Web Research Engine**: Real Google Search grounding with verified clickable URLs.
+- **System Monitor & Security Center**: Live CPU/RAM/SQLite integrity telemetry, local Ollama endpoint probe, approved folders/apps in SQLite, audit logs, secret masking, and database backup creation.
+
+## Local Development & Verification
+
+```bash
+npm install
+npm run dev
+```
+
+### Run Automated Tests
+```bash
+node --import tsx --test tests/core.test.ts
+```

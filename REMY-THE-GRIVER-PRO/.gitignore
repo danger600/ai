@@ -1,0 +1,15 @@
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.env
+storage/remy_griver_pro.db*
+storage/backups/*.db
+storage/documents/*
+storage/exports/*
+!storage/**/.gitkeep
+dist/
+build/
+*.spec
+.pytest_cache/

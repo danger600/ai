@@ -1,0 +1,6 @@
+{
+  "name": "REMY THE GRIVER PRO",
+  "description": "Personal AI Command Center & Career Intelligence Suite — Your Personal AI. Your Rules. Built for Remy Nsanzimana.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

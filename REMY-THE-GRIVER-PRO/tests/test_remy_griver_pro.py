@@ -375,6 +375,133 @@ class RemyGriverProTestSuite(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             media.generate_image("A futuristic Kigali skyline", aspect_ratio="16:9")
 
+    def test_13_openai_responses_api_streaming_and_non_streaming(self) -> None:
+        import http.server
+        import os
+        import urllib.request
+        from dataclasses import replace
+
+        captured_paths: list[str] = []
+        captured_payloads: list[dict[str, object]] = []
+
+        class MockResponsesHandler(http.server.BaseHTTPRequestHandler):
+            def do_POST(self) -> None:
+                captured_paths.append(self.path)
+                length = int(self.headers.get("Content-Length") or 0)
+                body = json.loads(self.rfile.read(length).decode("utf-8"))
+                captured_payloads.append(body)
+
+                if body.get("stream"):
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/event-stream")
+                    self.end_headers()
+                    events = (
+                        'event: response.output_text.delta\ndata: {"type":"response.output_text.delta","delta":"Hello from "}\n\n'
+                        'event: response.output_text.delta\ndata: {"type":"response.output_text.delta","delta":"OpenAI Responses API!"}\n\n'
+                        'event: response.completed\ndata: {"type":"response.completed","response":{"usage":{"total_tokens":27}}}\n\n'
+                    )
+                    self.wfile.write(events.encode("utf-8"))
+                    self.wfile.flush()
+                else:
+                    out = json.dumps({
+                        "id": "resp_123",
+                        "output_text": "Direct Responses API reply",
+                        "usage": {"total_tokens": 19},
+                    }).encode("utf-8")
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Content-Length", str(len(out)))
+                    self.end_headers()
+                    self.wfile.write(out)
+
+            def log_message(self, *_args: object) -> None:
+                return
+
+        srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), MockResponsesHandler)
+        port = srv.server_address[1]
+        t = threading.Thread(target=srv.serve_forever, daemon=True)
+        t.start()
+        old_url = os.environ.get("OPENAI_RESPONSES_URL")
+        try:
+            os.environ["OPENAI_RESPONSES_URL"] = f"http://127.0.0.1:{port}/v1/responses"
+            cfg = replace(load_config(), openai_api_key="sk-test-responses-1234567890", openai_base_url=f"http://127.0.0.1:{port}/v1")
+            engine = HybridAIEngine(cfg)
+
+            chunks: list[str] = []
+            stream_res = engine.stream_chat(
+                [
+                    {"role": "system", "content": "You are Remy AI."},
+                    {"role": "user", "content": "Say hello"},
+                ],
+                preferred_provider="openai",
+                model="gpt-4o-mini",
+                on_chunk=chunks.append,
+                first_token_timeout_sec=5.0,
+            )
+            self.assertEqual(stream_res.provider, "openai_responses")
+            self.assertEqual("".join(chunks), "Hello from OpenAI Responses API!")
+            self.assertEqual(stream_res.tokens_used, 27)
+            self.assertEqual(captured_paths[-1], "/v1/responses")
+            self.assertEqual(captured_payloads[-1].get("instructions"), "You are Remy AI.")
+
+            non_stream = engine.generate_text(
+                [{"role": "user", "content": "Test non stream"}],
+                model="gpt-4o-mini",
+                timeout_sec=5.0,
+            )
+            self.assertEqual(non_stream.text, "Direct Responses API reply")
+            self.assertEqual(non_stream.tokens_used, 19)
+        finally:
+            if old_url is None:
+                os.environ.pop("OPENAI_RESPONSES_URL", None)
+            else:
+                os.environ["OPENAI_RESPONSES_URL"] = old_url
+            srv.shutdown()
+            srv.server_close()
+
+    def test_14_unified_python_server_http_and_sse_endpoints(self) -> None:
+        import urllib.request
+
+        workspace_root = str(ROOT_DIR.parent)
+        if workspace_root not in sys.path:
+            sys.path.insert(0, workspace_root)
+        import server as py_server
+
+        py_server.init_server_runtime(self.tmp_path / "web_runtime.db")
+        srv = py_server.ReusableThreadingHTTPServer(("127.0.0.1", 0), py_server.RemyRequestHandler)
+        port = srv.server_address[1]
+        t = threading.Thread(target=srv.serve_forever, daemon=True)
+        t.start()
+        try:
+            with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/health", timeout=5) as r:
+                health = json.loads(r.read().decode("utf-8"))
+                self.assertTrue(health["ok"])
+                self.assertTrue(health["runtime"].startswith("Python"))
+                self.assertEqual(health["openaiResponsesUrl"], "https://api.openai.com/v1/responses")
+
+            with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/system/telemetry", timeout=5) as r:
+                tel = json.loads(r.read().decode("utf-8"))
+                self.assertTrue(tel["telemetry"]["nodeVersion"].startswith("Python "))
+                self.assertEqual(tel["dbHealth"]["integrity"], "ok")
+
+            req = urllib.request.Request(
+                f"http://127.0.0.1:{port}/api/studio/run-python",
+                data=json.dumps({"code": "print(21 * 2)"}).encode("utf-8"),
+                method="POST",
+                headers={"Content-Type": "application/json"},
+            )
+            with urllib.request.urlopen(req, timeout=5) as r:
+                py_run = json.loads(r.read().decode("utf-8"))
+                self.assertTrue(py_run["allowed"])
+                self.assertEqual(py_run["output"], "42")
+
+            with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/export/windows-python-bundle", timeout=5) as r:
+                zip_bytes = r.read()
+                self.assertTrue(zip_bytes.startswith(b"PK"))
+        finally:
+            srv.shutdown()
+            srv.server_close()
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

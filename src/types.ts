@@ -196,6 +196,7 @@ export interface SystemTelemetryResponse {
   };
   providers: {
     gemini: { available: boolean; model: string };
+    openai?: { available: boolean; endpoint: string; model: string };
     ollama: { available: boolean; endpoint: string; models: string[]; error?: string };
   };
 }

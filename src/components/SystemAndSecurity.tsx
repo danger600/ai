@@ -160,6 +160,22 @@ export function SystemMonitor() {
                 </span>
               </div>
 
+              {providers.openai && (
+                <div className="flex items-center justify-between rounded-lg border border-slate-200 p-3 text-xs dark:border-slate-800">
+                  <div>
+                    <div className="font-medium text-slate-900 dark:text-white">OpenAI Responses API</div>
+                    <div className="font-mono text-[11px] text-slate-500">{providers.openai.endpoint}</div>
+                  </div>
+                  <span
+                    className={`font-mono font-medium ${
+                      providers.openai.available ? 'text-emerald-500' : 'text-slate-500'
+                    }`}
+                  >
+                    {providers.openai.available ? 'Connected' : 'Key Not Set'}
+                  </span>
+                </div>
+              )}
+
               <div className="rounded-lg border border-slate-200 p-3 text-xs dark:border-slate-800">
                 <div className="flex items-center justify-between">
                   <div className="font-medium text-slate-900 dark:text-white">Local Ollama Probe</div>
@@ -567,6 +583,8 @@ export function SettingsPanel({
                 <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash Lite (Fast)</option>
                 <option value="gemini-4-carbon">Gemini 4 Carbon (Deep Reasoning)</option>
                 <option value="gemini-4-neon">Gemini 4 Neon (Interactive Pro)</option>
+                <option value="gpt-4o-mini">GPT-4o mini (OpenAI Responses API)</option>
+                <option value="gpt-4o">GPT-4o (OpenAI Responses API)</option>
               </select>
               <select
                 value={language}

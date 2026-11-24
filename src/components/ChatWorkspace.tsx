@@ -908,6 +908,8 @@ export function ChatWorkspace({
                   <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash Lite (Fast)</option>
                   <option value="gemini-4-carbon">Gemini 4 Carbon (Deep Reasoning)</option>
                   <option value="gemini-4-neon">Gemini 4 Neon (Interactive Pro)</option>
+                  <option value="gpt-4o-mini">GPT-4o mini (OpenAI Responses API)</option>
+                  <option value="gpt-4o">GPT-4o (OpenAI Responses API)</option>
                 </select>
 
                 <select

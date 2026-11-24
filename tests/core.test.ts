@@ -12,7 +12,7 @@ import {
 import { db, getDatabaseHealth, initDatabase } from '../server/db.ts';
 import { parseUploadedDocument } from '../server/documents.ts';
 import { isSettingEnabled, maskSecrets, validateSafePath, validateSafeUrl } from '../server/security.ts';
-import { runSandboxedJavascript } from '../server/tools.ts';
+import { runIsolatedPython, runSandboxedJavascript } from '../server/tools.ts';
 
 test('database initializes with foreign keys and integrity ok', () => {
   initDatabase();
@@ -155,5 +155,16 @@ test('general knowledge engine answers image generation and arbitrary queries st
   assert.ok(reply.includes('Generating High-Quality Images with AI'));
   assert.ok(reply.includes('gemini-3.1-flash-lite-image'));
   assert.ok(reply.length > 600);
+});
+
+test('isolated Python 3 sandbox runs valid Python and blocks subprocess/system imports', async () => {
+  initDatabase();
+  const ok = await runIsolatedPython('print(sum([10, 20, 12]))');
+  assert.equal(ok.allowed, true);
+  assert.equal(ok.output.trim(), '42');
+
+  const blocked = await runIsolatedPython('import subprocess\nsubprocess.run(["ls"])');
+  assert.equal(blocked.allowed, false);
+  assert.ok(blocked.error && blocked.error.includes('Security Gatekeeper blocked'));
 });
 

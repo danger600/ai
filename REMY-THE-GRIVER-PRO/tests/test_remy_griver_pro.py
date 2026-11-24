@@ -361,6 +361,20 @@ class RemyGriverProTestSuite(unittest.TestCase):
             server.shutdown()
             server.server_close()
 
+    def test_12_python_media_studio_validation_and_strict_local(self) -> None:
+        from backend.core.media_studio import PythonMediaStudio
+
+        media = PythonMediaStudio(self.conn, self.gatekeeper)
+        with self.assertRaises(ValueError):
+            media.generate_image("")
+        with self.assertRaises(ValueError):
+            media.generate_video("Test video", aspect_ratio="1:1")
+
+        self.conn.execute("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('strict_local_mode', 'true')")
+        self.conn.commit()
+        with self.assertRaises(RuntimeError):
+            media.generate_image("A futuristic Kigali skyline", aspect_ratio="16:9")
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

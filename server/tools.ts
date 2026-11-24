@@ -1,6 +1,12 @@
+import { execFile } from 'node:child_process';
+import fs from 'node:fs';
 import os from 'node:os';
+import path from 'node:path';
+import { promisify } from 'node:util';
 import vm from 'node:vm';
 import { isPermissionGranted, logAudit, validateSafeUrl } from './security.ts';
+
+const execFileAsync = promisify(execFile);
 
 let previousCpuInfo = os.cpus();
 
@@ -211,6 +217,80 @@ export function runSandboxedJavascript(code: string): {
       error: err instanceof Error ? err.message : String(err),
       durationMs: Date.now() - start,
     };
+  }
+}
+
+export async function runIsolatedPython(code: string): Promise<{
+  allowed: boolean;
+  output: string;
+  error?: string;
+  durationMs: number;
+  pythonVersion?: string;
+}> {
+  const start = Date.now();
+  if (!isPermissionGranted('studio.vm_exec')) {
+    logAudit('python_sandbox_blocked', 'security_gatekeeper', 'studio.vm_exec', 'denied', 'Permission disabled by user');
+    return {
+      allowed: false,
+      output: '',
+      error: 'Execution blocked by Security Gatekeeper: studio.vm_exec permission is disabled.',
+      durationMs: Date.now() - start,
+    };
+  }
+
+  // Static Python AST/safety gate before spawning python3 -I
+  const blockedPatterns = [
+    /\bimport\s+(subprocess|ctypes|socket|shutil)\b/,
+    /\bfrom\s+(subprocess|ctypes|socket|shutil)\s+import\b/,
+    /\bos\.(system|popen|exec|spawn|remove|unlink|rmdir)\b/,
+    /\b__import__\s*\(/,
+    /\bopen\s*\(\s*['"]\//,
+  ];
+  for (const pat of blockedPatterns) {
+    if (pat.test(code)) {
+      logAudit('python_sandbox_blocked', 'security_gatekeeper', 'ast_policy', 'denied', `Blocked pattern: ${pat.source}`);
+      return {
+        allowed: false,
+        output: '',
+        error: 'Security Gatekeeper blocked restricted system/subprocess/filesystem call inside Python sandbox.',
+        durationMs: Date.now() - start,
+      };
+    }
+  }
+
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'remy-py-'));
+  const scriptPath = path.join(tmpDir, 'snippet.py');
+  try {
+    fs.writeFileSync(scriptPath, code, 'utf8');
+    const { stdout, stderr } = await execFileAsync('python3', ['-I', '-B', scriptPath], {
+      cwd: tmpDir,
+      timeout: 3000,
+      maxBuffer: 256 * 1024,
+      env: {
+        PATH: process.env.PATH || '/usr/bin:/bin',
+        PYTHONIOENCODING: 'utf-8',
+      },
+    });
+    logAudit('python_sandbox_exec', 'developer_studio', 'python3', 'allowed', `Executed ${code.length} chars in isolated Python`);
+    return {
+      allowed: true,
+      output: stdout.trimEnd(),
+      error: stderr.trim() ? stderr.trim() : undefined,
+      durationMs: Date.now() - start,
+      pythonVersion: 'python3 -I',
+    };
+  } catch (err) {
+    const e = err as { stdout?: string; stderr?: string; message?: string };
+    const stderr = e.stderr?.trim() || e.message || 'Python execution failed';
+    logAudit('python_sandbox_error', 'developer_studio', 'python3', 'info', stderr.slice(0, 140));
+    return {
+      allowed: true,
+      output: (e.stdout || '').trimEnd(),
+      error: stderr,
+      durationMs: Date.now() - start,
+    };
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 }
 

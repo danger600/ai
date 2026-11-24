@@ -27,6 +27,7 @@ import {
   fetchLiveCurrencyRates,
   fetchOpenMeteoWeather,
   getSystemTelemetry,
+  runIsolatedPython,
   runSandboxedJavascript,
 } from './server/tools.ts';
 
@@ -514,6 +515,16 @@ app.post('/api/studio/run-vm', (req: Request, res: Response) => {
   res.json(result);
 });
 
+app.post('/api/studio/run-python', async (req: Request, res: Response) => {
+  const code = typeof req.body?.code === 'string' ? req.body.code : '';
+  if (!code.trim()) {
+    res.status(400).json({ error: 'Python code is required' });
+    return;
+  }
+  const result = await runIsolatedPython(code);
+  res.json(result);
+});
+
 app.post('/api/studio/analyze-github', async (req: Request, res: Response) => {
   try {
     const repoUrl = typeof req.body?.repoUrl === 'string' ? req.body.repoUrl : '';
@@ -525,7 +536,7 @@ app.post('/api/studio/analyze-github', async (req: Request, res: Response) => {
 });
 
 app.post('/api/studio/ai-assist', async (req: Request, res: Response) => {
-  const { task, code, language = 'TypeScript / React', model = 'gemini-4-hydrogen' } = req.body as {
+  const { task, code, language = 'Python 3.11+', model = 'gemini-4-hydrogen' } = req.body as {
     task: string;
     code: string;
     language?: string;
@@ -533,7 +544,7 @@ app.post('/api/studio/ai-assist', async (req: Request, res: Response) => {
   };
   if (isSettingEnabled('strict_local_mode')) {
     logAudit('strict_local_blocked', 'security_gatekeeper', 'studio.ai_assist', 'denied', 'Strict Local-Only Privacy Mode is active');
-    res.status(403).json({ error: 'Strict Local-Only Privacy Mode is active. Use the isolated local VM runner or disable Strict Local Mode in Settings.' });
+    res.status(403).json({ error: 'Strict Local-Only Privacy Mode is active. Use the isolated local Python runner or disable Strict Local Mode in Settings.' });
     return;
   }
   const ai = getGeminiClient();
@@ -548,7 +559,7 @@ app.post('/api/studio/ai-assist', async (req: Request, res: Response) => {
         contents: `Task: ${task}\nTarget Language/Stack: ${language}\n\nInput Code / Context:\n${code}`,
         config: {
           systemInstruction:
-            'You are the Software Engineering Agent in REMY THE GRIVER PRO. Provide crisp, production-ready code, explanations, SQL schemas, READMEs, or unit tests in Markdown.',
+            'You are the Software Engineering Agent in REMY THE GRIVER PRO. Write clean, idiomatic Python 3.11+ code by default unless another language is explicitly requested. Provide crisp, production-ready code, explanations, SQL schemas, READMEs, or pytest/unittest suites in Markdown.',
         },
       })
     );

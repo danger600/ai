@@ -15,6 +15,7 @@ from backend.core.ai_engine import HybridAIEngine, format_ai_error_message
 from backend.core.config import APP_NAME, APP_TAGLINE, PERSONAL_BRAND, THEMES, load_config
 from backend.core.context_builder import build_global_chat_context, build_local_fallback_reply
 from backend.core.logging_setup import setup_logging
+from backend.core.media_studio import PythonMediaStudio
 from backend.core.security import SecurityGatekeeper, store_secret
 from backend.database.db import create_backup, init_database, restore_backup
 from backend.documents.rag_engine import LocalRAGEngine
@@ -66,6 +67,7 @@ class RemyGriverProApp(BaseCTk):  # type: ignore[misc]
         self.plugin_manager = PluginManager(self.conn, self.gatekeeper)
         self.dev_studio = DevStudioEngine(self.conn, self.gatekeeper)
         self.github_inspector = GitHubInspector(self.conn, self.gatekeeper)
+        self.media_studio = PythonMediaStudio(self.conn, self.gatekeeper)
 
         self.ui_queue: queue.Queue[tuple[str, Any]] = queue.Queue()
         self.cancel_event = threading.Event()
@@ -210,7 +212,8 @@ class RemyGriverProApp(BaseCTk):  # type: ignore[misc]
 
         items = [
             ("chat", "AI Assistant Chat", False),
-            ("studio", "Developer Studio", False),
+            ("studio", "Developer Studio (Python)", False),
+            ("media", "Media Studio (Image/Video)", False),
             ("documents", "Document Hub (RAG)", False),
             ("cv", "Private CV Vault", True),
             ("memory", "Memory Vault", True),
@@ -319,6 +322,7 @@ class RemyGriverProApp(BaseCTk):  # type: ignore[misc]
         titles = {
             "chat": "AI Assistant Workspace (10 Specialized Agents)",
             "studio": "Developer Studio — AST Analyzer, SQL & Isolated Python Sandbox",
+            "media": "Python Media Studio — Text-to-Image & Text-to-Video",
             "documents": "Document Intelligence & Local RAG Citations",
             "cv": "Private CV & Career Intelligence (Remy Nsanzimana)",
             "memory": "Controlled Memory Vault",
@@ -332,6 +336,7 @@ class RemyGriverProApp(BaseCTk):  # type: ignore[misc]
         builders = {
             "chat": self._build_chat_view,
             "studio": self._build_studio_view,
+            "media": self._build_media_view,
             "documents": self._build_documents_view,
             "cv": self._build_cv_view,
             "memory": self._build_memory_view,
@@ -353,10 +358,22 @@ class RemyGriverProApp(BaseCTk):  # type: ignore[misc]
         ctk.CTkLabel(top_controls, text="Agent:").pack(side="left", padx=(0, 4))
         ctk.CTkOptionMenu(top_controls, values=agent_choices, variable=self.agent_var, width=140).pack(side="left", padx=4)
 
-        self.model_var = tk.StringVar(value=self.cfg.default_cloud_model)
+        self.model_var = tk.StringVar(value="gemini-4-hydrogen")
         ctk.CTkLabel(top_controls, text="Model:").pack(side="left", padx=(10, 4))
         ctk.CTkOptionMenu(
-            top_controls, values=["gpt-4o-mini", "gpt-4o", "llama3", "mistral"], variable=self.model_var, width=130
+            top_controls,
+            values=[
+                "gemini-4-hydrogen",
+                "gemini-3.1-flash-lite",
+                "gemini-4-carbon",
+                "gemini-4-neon",
+                "gpt-4o-mini",
+                "gpt-4o",
+                "llama3",
+                "mistral",
+            ],
+            variable=self.model_var,
+            width=165,
         ).pack(side="left", padx=4)
 
         self.lang_var = tk.StringVar(value=self.language)
@@ -804,6 +821,42 @@ class RemyGriverProApp(BaseCTk):  # type: ignore[misc]
     def _run_briefing_plugin(self) -> None:
         res = self.plugin_manager.run_plugin("plug-kigali-brief", {"include_weather": not self.strict_local})
         messagebox.showinfo(APP_NAME, str(res))
+
+    # --- View 8b: Python Media Studio ---
+    def _build_media_view(self) -> None:
+        bar = ctk.CTkFrame(self.view_frame, fg_color="transparent")
+        bar.pack(fill="x", padx=12, pady=10)
+        self.media_mode_var = tk.StringVar(value="image")
+        ctk.CTkOptionMenu(bar, values=["image", "video"], variable=self.media_mode_var, width=110).pack(side="left", padx=4)
+        self.media_aspect_var = tk.StringVar(value="16:9")
+        ctk.CTkOptionMenu(bar, values=["16:9", "9:16", "1:1"], variable=self.media_aspect_var, width=90).pack(side="left", padx=4)
+        self.media_prompt_entry = ctk.CTkEntry(bar, placeholder_text="Describe the image or video to generate...", width=420)
+        self.media_prompt_entry.pack(side="left", fill="x", expand=True, padx=6)
+        ctk.CTkButton(bar, text="Generate (Python)", command=self._run_media_generation).pack(side="left", padx=4)
+        self.media_status_box = ctk.CTkTextbox(self.view_frame, fg_color=self.palette["bg_card"], font=("JetBrains Mono", 11))
+        self.media_status_box.pack(fill="both", expand=True, padx=12, pady=(0, 12))
+        self.media_status_box.insert("1.0", "Python Media Studio Ready (gemini-3.1-flash-lite-image / gemini-omni-1.2-flash).\nOutputs save to storage/exports/.\n")
+
+    def _run_media_generation(self) -> None:
+        prompt = self.media_prompt_entry.get().strip()
+        mode = self.media_mode_var.get()
+        aspect = self.media_aspect_var.get()
+        if not prompt:
+            return
+        self.media_status_box.insert("end", f"\nGenerating {mode} ({aspect})...\n")
+
+        def _worker() -> None:
+            try:
+                if mode == "image":
+                    res = self.media_studio.generate_image(prompt, aspect_ratio=aspect)
+                else:
+                    vid_aspect = aspect if aspect in ("16:9", "9:16") else "16:9"
+                    res = self.media_studio.generate_video(prompt, aspect_ratio=vid_aspect)
+                self.ui_queue.put(("info_popup", f"Saved {res.media_type} to:\n{res.output_path}"))
+            except Exception as exc:
+                self.ui_queue.put(("error_popup", str(exc)))
+
+        threading.Thread(target=_worker, daemon=True).start()
 
     # --- View 9: Settings ---
     def _build_settings_view(self) -> None:
